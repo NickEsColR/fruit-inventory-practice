@@ -3,18 +3,21 @@
   "compilerOptions": {
     "baseUrl": ".",
     "paths": {
-      "@/*": ["src/*"]
+      "@/*": ["src/*"],
+      "@prisma/*": ["generated/prisma/*"]
     },
     // File Layout
-    "rootDir": "./src",
+    "rootDir": ".",
     "outDir": "./dist",
 
     // Environment Settings
     // See also https://aka.ms/tsconfig/module
     "module": "commonjs",
+    "moduleResolution": "node",
     "esModuleInterop": true,
-    "target": "es2016",
+    "target": "es2023",
     "forceConsistentCasingInFileNames": true,
+    // "ignoreDeprecations": "6.0",
     // "types": [],
     // For nodejs:
     // "lib": ["esnext"],
@@ -46,5 +49,7 @@
     // "noUncheckedSideEffectImports": true,
     // "moduleDetection": "force",
     "skipLibCheck": true,
-  }
+  },
+  "include": ["src/**/*"],
+  "exclude": ["node_modules", "dist"]
 }
