@@ -1,6 +1,6 @@
 # Fruit Inventory API
 
-A RESTful API built with **Node.js**, **TypeScript**, and **Express 5** for managing a fruit inventory backed by a **PostgreSQL** database. The project follows a clean layered architecture with separated concerns across configuration, data access, domain, and presentation layers. Persistence is handled via **Prisma ORM** with a PostgreSQL adapter.
+A RESTful API built with **Node.js**, **TypeScript**, and **Express 5** for managing a fruit inventory backed by a **PostgreSQL** database. The project follows **Clean Architecture** principles with clearly separated concerns across configuration, data access, domain, infrastructure, and presentation layers. Persistence is handled via **Prisma ORM** with a PostgreSQL adapter.
 
 This project is inspired by the course [NoNode.Js: De cero a expertode](https://cursos.devtalles.com/courses/nodejs-de-cero-a-experto) RestServer sections
 
@@ -26,28 +26,46 @@ This project is inspired by the course [NoNode.Js: De cero a expertode](https://
 ```bash
 fruit-inventory-practice/
 ├── src/
-│   ├── app.ts                               # Application entry point
+│   ├── app.ts                                      # Application entry point
 │   ├── config/
-│   │   └── envs.ts                          # Validated environment variables
+│   │   └── envs.ts                                 # Validated environment variables
 │   ├── data/
 │   │   └── postgres/
-│   │       └── index.ts                     # Prisma client singleton
+│   │       └── index.ts                            # Prisma client singleton
 │   ├── domain/
-│   │   └── dtos/
+│   │   ├── datasources/
+│   │   │   └── inventory.datasource.ts             # Abstract datasource contract
+│   │   ├── dtos/
+│   │   │   └── inventory/
+│   │   │       ├── create-fruit.dto.ts             # Validation DTO for creation
+│   │   │       └── update-fruit.dto.ts             # Validation DTO for updates
+│   │   ├── entities/
+│   │   │   └── fruit.entity.ts                     # Fruit domain entity
+│   │   ├── repositories/
+│   │   │   └── inventory.repository.ts             # Abstract repository contract
+│   │   └── use-cases/
 │   │       └── inventory/
-│   │           ├── create-fruit.dto.ts      # Validation DTO for creation
-│   │           └── update-fruit.dto.ts      # Validation DTO for updates
+│   │           ├── create-fruit.ts                 # Create fruit use case
+│   │           ├── delete-fruit.ts                 # Delete fruit use case
+│   │           ├── get-fruit.ts                    # Get single fruit use case
+│   │           ├── get-fruits.ts                   # Get all fruits use case
+│   │           └── update-fruit.ts                 # Update fruit use case
+│   ├── infraestructure/
+│   │   ├── datasource/
+│   │   │   └── inventory.datasource.impl.ts        # Prisma datasource implementation
+│   │   └── repositories/
+│   │       └── inventory.repository.impl.ts        # Repository implementation
 │   └── presentation/
-│       ├── server.ts                        # Express server class
-│       ├── routes.ts                        # Root route aggregator
+│       ├── server.ts                               # Express server class
+│       ├── routes.ts                               # Root route aggregator
 │       └── inventory/
-│           ├── controller.ts                # Request handlers & business logic
-│           └── routes.ts                    # Inventory-specific route definitions
+│           ├── controller.ts                       # Request handlers (delegates to use cases)
+│           └── routes.ts                           # Dependency wiring & route definitions
 ├── prisma/
-│   ├── schema.prisma                        # Prisma schema (Fruit model)
-│   └── migrations/                          # Auto-generated SQL migrations
+│   ├── schema.prisma                               # Prisma schema (Fruit model)
+│   └── migrations/                                 # Auto-generated SQL migrations
 ├── generated/
-│   └── prisma/                              # Prisma generated client
+│   └── prisma/                                     # Prisma generated client
 ├── docker-compose.yml                       # PostgreSQL container definition
 ├── .env                                     # Local environment variables (not committed)
 ├── .env.template                            # Environment variable template
@@ -198,8 +216,6 @@ GET /api/inventory/:id
 { "error": "ID must be a number" }
 ```
 
-**Response `404`**
-
 ```json
 { "error": "Fruit not found" }
 ```
@@ -275,14 +291,12 @@ Content-Type: application/json
 **Response `400`**
 
 ```json
-{ "error": "ID is required and must be a number" }
+{ "error": "ID must be a number" }
 ```
 
 ```json
 { "error": "Quantity must be a positive number" }
 ```
-
-**Response `404`**
 
 ```json
 { "error": "Fruit not found" }
@@ -308,8 +322,6 @@ DELETE /api/inventory/:id
 { "error": "ID must be a number" }
 ```
 
-**Response `404`**
-
 ```json
 { "error": "Fruit not found" }
 ```
@@ -332,16 +344,43 @@ DELETE /api/inventory/:id
 
 ## Architecture Overview
 
-The project follows a **layered architecture**:
+The project follows **Clean Architecture** principles with four clearly separated layers:
 
-- **`config/`** — Centralizes and validates all environment variables using `env-var`, throwing at startup if any required variable is missing.
-- **`data/postgres/`** — Exports a Prisma client singleton configured with the `@prisma/adapter-pg` driver adapter for PostgreSQL.
-- **`domain/dtos/`** — Plain TypeScript classes (Data Transfer Objects) that encapsulate input validation logic for create and update operations, keeping it out of the controller.
-- **`presentation/server.ts`** — Contains the `Server` class responsible for initializing Express, registering middleware (`json`, `urlencoded`), mounting routes, and starting the HTTP listener.
-- **`presentation/routes.ts`** — Top-level route aggregator that namespaces feature routes under `/api`.
-- **`presentation/inventory/`** — Feature-scoped module with its own router and fully async controller using Prisma for all database operations.
+### Domain Layer (`src/domain/`)
 
-Path aliases (`@/*` → `src/*`) are configured via `tsconfig-paths` for cleaner imports.
+The core of the application. Contains no dependencies on frameworks or external libraries.
+
+- **`entities/`** — `FruitEntity` models the core business object and validates its fields via static factory method `fromObject()`.
+- **`datasources/`** — Abstract `InventoryDataSource` class defining the data access contract (`create`, `getAll`, `findById`, `updateById`, `deleteById`).
+- **`repositories/`** — Abstract `InventoryRepository` class acting as the port between domain use cases and the infrastructure layer.
+- **`dtos/`** — `CreateFruitDto` and `UpdateFruitDto` encapsulate and validate input data, returning a typed `[error?, dto?]` tuple.
+- **`use-cases/`** — One class per operation (`GetFruits`, `GetFruit`, `CreateFruit`, `UpdateFruit`, `DeleteFruit`), each receiving a repository via constructor injection and delegating to it.
+
+### Infrastructure Layer (`src/infraestructure/`)
+
+Concrete implementations of domain abstractions, dependent on Prisma.
+
+- **`datasource/inventory.datasource.impl.ts`** — Implements `InventoryDataSource` using Prisma queries against PostgreSQL and maps results to `FruitEntity` instances.
+- **`repositories/inventory.repository.impl.ts`** — Implements `InventoryRepository` by delegating all calls to the injected datasource.
+
+### Data Layer (`src/data/`)
+
+- **`postgres/index.ts`** — Exports a Prisma client singleton configured with the `@prisma/adapter-pg` driver adapter.
+
+### Presentation Layer (`src/presentation/`)
+
+Handles HTTP concerns only. Controllers contain no business logic.
+
+- **`server.ts`** — `Server` class initializes Express, registers `json` and `urlencoded` middlewares, mounts routes, and starts the HTTP listener.
+- **`presentation/routes.ts`** — Top-level route aggregator that namespaces all feature routes under `/api`.
+- **`inventory/routes.ts`** — Wires together datasource, repository, and controller via constructor injection.
+- **`inventory/controller.ts`** — Validates inputs with DTOs, then delegates each request to the corresponding use case via promise chaining.
+
+### Configuration (`src/config/`)
+
+- **`envs.ts`** — Centralizes and validates all environment variables using `env-var`, throwing at startup if any required variable is missing.
+
+> Path aliases (`@/*` → `src/*`) are configured in `tsconfig.json` and resolved at runtime via `tsconfig-paths`.
 
 ---
 
