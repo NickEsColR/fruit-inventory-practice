@@ -1,94 +1,59 @@
 import { prisma } from '@/data/postgres'
 import { CreateFruitDto } from '@/domain/dtos/inventory/create-fruit.dto';
 import { UpdateFruitDto } from '@/domain/dtos/inventory/update-fruit.dto';
+import { InventoryRepository } from '@/domain/repositories/inventory.repository';
+import { CreateFruit } from '@/domain/use-cases/inventory/create-fruit';
+import { DeleteFruit } from '@/domain/use-cases/inventory/delete-fruit';
+import { GetFruit } from '@/domain/use-cases/inventory/get-fruit';
+import { GetFruits } from '@/domain/use-cases/inventory/get-fruits';
+import { UpdateFruit } from '@/domain/use-cases/inventory/update-fruit';
 import { Request, Response } from 'express'
 
 export class InventoryController {
-  constructor() { }
+  constructor(private readonly inventoryRepository: InventoryRepository) { }
 
-  public async getInventory(req: Request, res: Response) {
-    try {
-      const inventory = await prisma.fruit.findMany();
-      return res.json(inventory);
-    } catch (error) {
-      return res.status(500).json({ error: 'Internal server error' });
-    }
+  public getInventory(req: Request, res: Response) {
+    new GetFruits(this.inventoryRepository).execute()
+      .then(fruits => res.json(fruits))
+      .catch(error => res.status(400).json({ error }));
   }
 
-  public async getFruitById(req: Request, res: Response) {
-    try {
-      const id = Number(req.params.id);
-      if (isNaN(id)) return res.status(400).json({ error: 'ID must be a number' });
+  public getFruitById(req: Request, res: Response) {
+    const id = +req.params.id;
+    if (isNaN(id)) return res.status(400).json({ error: 'ID must be a number' });
 
-      const fruit = await prisma.fruit.findFirst({
-        where: { id: id }
-      });
-
-      (fruit)
-        ? res.json(fruit)
-        : res.status(404).json({ error: 'Fruit not found' });
-    } catch (error) {
-      return res.status(500).json({ error: 'Internal server error' });
-    }
+    new GetFruit(this.inventoryRepository).execute(id)
+      .then(fruit => res.json(fruit))
+      .catch(error => res.status(400).json({ error }));
   }
 
-  public async createFruit(req: Request, res: Response) {
-    try {
-      const [error, createFruitDto] = CreateFruitDto.create(req.body);
-      if (error) {
-        return res.status(400).json({ error });
-      }
+  public createFruit(req: Request, res: Response) {
+    const [error, createFruitDto] = CreateFruitDto.create(req.body);
+    if (error) return res.status(400).json({ error });
 
-      const newFruit = await prisma.fruit.create({
-        data: createFruitDto!
-      });
-      return res.status(201).json(newFruit);
-    } catch (error) {
-      return res.status(500).json({ error: 'Internal server error' });
-    }
+    new CreateFruit(this.inventoryRepository).execute(createFruitDto!)
+      .then(fruit => res.status(201).json(fruit))
+      .catch(error => res.status(400).json({ error }));
   }
 
-  public async updateFruit(req: Request, res: Response) {
-    try {
-      const id = req.params.id;
-      const [error, updateFruitDto] = UpdateFruitDto.create({ ...req.body, id });
-      if (error) return res.status(400).json({ error });
+  public  updateFruit(req: Request, res: Response) {
+    const id = +req.params.id;
+    if (isNaN(id)) return res.status(400).json({ error: 'ID must be a number' });
 
-      const fruit = await prisma.fruit.findFirst({
-        where: { id: updateFruitDto!.id },
-      });
+    const [error, updateFruitDto] = UpdateFruitDto.create(req.body);
+    if (error) return res.status(400).json({ error });
 
-      if (!fruit) return res.status(404).json({ error: 'Fruit not found' });
-
-      const updatedFruit = await prisma.fruit.update({
-        where: { id: updateFruitDto!.id },
-        data: updateFruitDto!.values,
-      });
-
-      return res.json(updatedFruit);
-    } catch (error) {
-      return res.status(500).json({ error: 'Internal server error' });
-    }
+    new UpdateFruit(this.inventoryRepository).execute(id, updateFruitDto!)
+      .then(fruit => res.json(fruit))
+      .catch(error => res.status(400).json({ error }));
   }
 
-  public async deleteFruit(req: Request, res: Response) {
-    try {
-      const id = +req.params.id;
-      if (isNaN(id)) return res.status(400).json({ error: 'ID must be a number' });
+  public deleteFruit(req: Request, res: Response) {
+    const id = +req.params.id;
+    if (isNaN(id)) return res.status(400).json({ error: 'ID must be a number' });
 
-      const fruit = await prisma.fruit.findFirst({
-        where: { id },
-      });
-
-      if (!fruit) return res.status(404).json({ error: 'Fruit not found' });
-
-      const deleted = await prisma.fruit.delete({
-        where: { id },
-      });
-
-      return res.json(deleted);
-    } catch (error) {
-      return res.status(500).json({ error: 'Internal server error' });
-    }
+    new DeleteFruit(this.inventoryRepository).execute(id)
+      .then(fruit => res.json(fruit))
+      .catch(error => res.status(400).json({ error }));
   }
 }
